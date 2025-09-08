@@ -1,0 +1,22 @@
+[2025-02-26 20:37:17 +0100] [1778242] [INFO] Starting gunicorn 23.0.0
+[2025-02-26 20:37:17 +0100] [1778242] [INFO] Listening at: https://0.0.0.0:5000 (1778242)
+[2025-02-26 20:37:17 +0100] [1778242] [INFO] Using worker: sync
+[2025-02-26 20:37:17 +0100] [1778293] [INFO] Booting worker with pid: 1778293
+[2025-02-26 20:45:33 +0100] [1778242] [INFO] Handling signal: term
+Exception ignored in atexit callback: <bound method finalize._exitfunc of <class 'weakref.finalize'>>
+Traceback (most recent call last):
+  File "/usr/lib/python3.10/weakref.py", line 667, in _exitfunc
+    f()
+  File "/usr/lib/python3.10/weakref.py", line 591, in __call__
+    return info.func(*info.args, **(info.kwargs or {}))
+  File "/usr/local/lib/python3.10/dist-packages/torch/library.py", line 402, in _del_library
+    handle.destroy()
+  File "/usr/local/lib/python3.10/dist-packages/torch/_library/utils.py", line 30, in destroy
+    self._on_destroy()
+  File "/var/www/vhosts/objective-dhawan.92-205-128-180.plesk.page/httpdocs/baeckerai/baeckerai_app.py", line 12, in graceful_shutdown
+    sys.exit(0)
+SystemExit: 0
+Signal 15 empfangen. Fahre mit dem Herunterfahren fort.
+Signal 15 empfangen. Fahre mit dem Herunterfahren fort.
+Signal 15 empfangen. Fahre mit dem Herunterfahren fort.
+[2025-02-26 20:45:34 +0100] [1778242] [INFO] Shutting down: Master

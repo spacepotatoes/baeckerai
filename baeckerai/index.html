@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Croissant/Bretzel Counter Demo</title>
+    
+    <!-- Tailwind per CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js per CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js DataLabels-Plugin -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+    
+    <!-- Optional: Quicksand-Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;600&display=swap" rel="stylesheet" />
+    
+    <style>
+      body {
+        font-family: 'Quicksand', sans-serif;
+      }
+      /* Offline-Status des Servers */
+      #server-status.offline {
+        background-color: #fee2e2;
+        color: #b91c1c;
+      }
+      /* Ressourcen-Canvas: Für die kleinen Diagramme in den Ressourcen-Boxen */
+      .canvasRessourcen {
+        max-width: 90% !important;
+        max-height: 80px !important;
+        display: block !important;
+        background-color: transparent !important;
+        border: none !important;
+        text-align: left !important;
+      }
+      /* Umwelt-Bar-Charts (CO₂, Wasser, Strom) */
+      .canvasEnv {
+        max-height: 400px !important;
+        max-width: 30% !important; 
+      }
+      /* Donut-Charts: Keine Breiten-Einschränkung, max-height angepasst */
+      .canvasDonut {
+        max-width: 100% !important;
+        max-height: 250px !important;
+      }
+	  .logo {
+		max-width: 200px;	
+	  }
+	  .header_img {
+		  max-width: 50px;
+		}
+    </style>
+  </head>
+  <body class="bg-white text-center">
+    <!-- Gesamter Wrapper – 100vh, flex-col -->
+    <div class="h-screen flex flex-col">
+      <!-- Header: Überschrift und "Nochmal scannen" Button -->
+       <header
+  class="flex flex-col items-center      <!-- xs: Spalte & alles zentriert -->
+         sm:flex-row sm:items-center     <!-- ab sm: Zeile & vertikal zentriert -->
+         sm:justify-between              <!-- ab sm: links–rechts spread -->
+         gap-3 sm:gap-6 px-4 mt-4 w-full">
+
+  <!-- Logo -->
+  <img src="/baeckerai/assets/baeckerAi_logo_v3.png"
+       alt="BäckerAI Logo"
+       class="logo sm:self-start">       <!-- auf Desktop wieder ganz links -->
+
+  <!-- Icon‑Gruppe -->
+  <div class="flex gap-4 my-2 sm:my-0">
+    <img src="/baeckerai/assets/brezel_kreis.png"    class="header_img" alt="">
+    <img src="/baeckerai/assets/croissant_kreis.png" class="header_img" alt="">
+    <img src="/baeckerai/assets/broetchen_kreis.png" class="header_img" alt="">
+  </div>
+
+  <!-- Button -->
+  <button id="btnRescan"
+          onclick="location.reload()"
+          class="bg-[#bfe1f7] hover:bg-[#aed7f1] text-black
+                 font-bold py-2 px-4 rounded
+                 sm:self-end">           <!-- Desktop: ganz rechts -->
+    Nochmal scannen
+  </button>
+</header>
+
+
+  
+      <!-- Oberer Bereich (flex-grow) -->
+      <div class="flex-grow">
+        <!-- Hauptcontainer (Initialzustand) -->
+        <div id="mainContainer" class="w-full px-4">
+          <!-- Serverstatus -->
+          <div class="bg-white border-2 border-gray-300 p-4 rounded mb-4">
+            <div class="bg-gray-100 p-4 rounded">
+              <div id="server-status" class="px-3 py-2 font-semibold bg-green-100 text-green-700 rounded inline-block">
+                Überprüfe Serverstatus...
+              </div>
+            </div>
+          </div>
+  
+          <!-- Unsichtbares Video & File-Input -->
+          <video id="webcam" autoplay playsinline class="hidden"></video>
+          <input id="image-upload" type="file" accept="image/*" class="hidden" />
+  
+          <!-- Canvas, Result + Counts -->
+          <div class="bg-white border-2 border-gray-300 p-4 rounded mb-4">
+            <div class="bg-gray-100 p-4 rounded">
+				<div><h2 class="font-semibold text-3xl">Bitte wählen Sie unten ein Bild und klicken danach auf analysieren.</h2></div>
+              <!-- ───────────── Canvas‑Wrapper ───────────── -->
+    <div class="relative mx-auto mb-4" style="width:800px; height:480px;">
+      <!-- Hintergrund‑Canvas (z‑Index 0) -->
+      <canvas id="backgroundCanvas"
+              width="800" height="480"
+              class="absolute inset-0 z-0 border-2 border-gray-300 rounded">
+      </canvas>
+
+      <!-- Benutzer‑Canvas (z‑Index 10) -->
+      <canvas id="previewCanvas"
+              width="800" height="480"
+              class="absolute inset-0 z-10 border-2 border-gray-300 rounded">
+      </canvas>
+    </div>
+    <!-- ───────────── /Canvas‑Wrapper ───────────── -->
+              <div id="result"></div>
+              <div id="counts" class="p-4"></div>
+            </div>
+          </div>
+  
+          <!-- Menüleiste (Button "Analysieren") -->
+          <div class="bg-white border-2 border-gray-300 p-4 rounded">
+            <div class="bg-gray-100 p-4 rounded flex justify-center gap-4">
+              <button id="openCamBtn" class="bg-[#bfe1f7] hover:bg-[#aed7f1] text-black font-bold py-2 px-4 rounded">Open Webcam</button>
+              <button id="captureBtn" class="bg-[#ffe3b6] hover:bg-[#ffd696] text-black font-bold py-2 px-4 rounded">Capture Webcam</button>
+              <button id="openFileBtn" class="bg-[#cfffdf] hover:bg-[#b7ffcd] text-black font-bold py-2 px-4 rounded">Datei wählen/aufnehmen</button>
+              <button id="analyzeBtn" class="bg-[#f7ccbf] hover:bg-[#f2b9a8] text-black font-bold py-2 px-4 rounded">Analysieren</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script>
+      // Registriere das DataLabels-Plugin
+      Chart.register(ChartDataLabels);
+  
+      // ========== DOM-Elemente ==========
+      const serverStatusDiv = document.getElementById("server-status");
+      const webcam = document.getElementById("webcam");
+      const openCamBtn = document.getElementById("openCamBtn");
+      const captureBtn = document.getElementById("captureBtn");
+      const openFileBtn = document.getElementById("openFileBtn");
+      const fileInput = document.getElementById("image-upload");
+      const analyzeBtn = document.getElementById("analyzeBtn");
+      const btnRescan = document.getElementById("btnRescan");
+  
+      const previewCanvas = document.getElementById("previewCanvas");
+      const ctx = previewCanvas.getContext("2d");
+      const resultDiv = document.getElementById("result");
+      const countsDiv = document.getElementById("counts");
+      const mainContainer = document.getElementById("mainContainer");
+  
+      // Globale Variablen
+      let totalCroissants = 0;
+      let totalBrezeln = 0;
+      let totalKaiser = 0; // NEU: Kaiserbrötchen
+      let latestBlob = null;
+  
+      // Variablen für Bounding Boxes
+      let originalWidth = 0;
+      let originalHeight = 0;
+      let scaleFactor = 1;
+      let offsetX = 0;
+      let offsetY = 0;
+  
+      // ======================
+      // KOSTEN-KONSTANTEN
+      // ======================
+      const COST_CROISSANT = 0.5;
+      const COST_BRETZEL   = 0.3;
+      const COST_KAISER    = 0.2;  // Bisher war COST_BREAD=0.2; nun nutzen wir es für Kaiserbrötchen
+  
+      // URLs
+      const PING_URL = "https://objective-dhawan.92-205-128-180.plesk.page:5000/ping";
+      const PREDICT_URL = "https://objective-dhawan.92-205-128-180.plesk.page:5000/predict";
+  
+      // SERVER STATUS
+      async function checkServerStatus() {
+        try {
+          const resp = await fetch(PING_URL);
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.status === "OK") {
+              serverStatusDiv.textContent = "Serverstatus: OK";
+              serverStatusDiv.classList.remove("offline");
+            } else {
+              serverStatusDiv.textContent = "Serverstatus: Unbekannt";
+              serverStatusDiv.classList.add("offline");
+            }
+          } else {
+            serverStatusDiv.textContent = "Serverstatus: Offline";
+            serverStatusDiv.classList.add("offline");
+          }
+        } catch (err) {
+          console.error(err);
+          serverStatusDiv.textContent = "Serverstatus: Offline";
+          serverStatusDiv.classList.add("offline");
+        }
+      }
+      window.onload = checkServerStatus;
+      setInterval(checkServerStatus, 10000);
+  
+		/* ─── Hintergrund einmalig zeichnen ─── */
+const bgCanvas = document.getElementById("backgroundCanvas");
+const bgCtx    = bgCanvas.getContext("2d");
+
+const bgImg = new Image();
+bgImg.src   = "./assets/placeholder.jpg";     //  ←  ersetze durch deinen gewünschten Start‑Pfad
+		
+bgImg.onload = () => {
+	
+  bgCtx.drawImage(bgImg, 0, 0, bgCanvas.width, bgCanvas.height);
+};
+		
+      // WEBCAM
+      openCamBtn.addEventListener("click", async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          webcam.srcObject = stream;
+        } catch (e) {
+          alert("Webcam not accessible!");
+        }
+      });
+  
+      captureBtn.addEventListener("click", () => {
+        if (!webcam.srcObject) {
+          alert("Webcam is not open!");
+          return;
+        }
+		    /* ► Hintergrund ausblenden */
+  hideBackground();  
+        const videoW = webcam.videoWidth;
+        const videoH = webcam.videoHeight;
+        previewCanvas.width = videoW;
+        previewCanvas.height = videoH;
+        ctx.clearRect(0, 0, videoW, videoH);
+        ctx.drawImage(webcam, 0, 0, videoW, videoH);
+        originalWidth = videoW;
+        originalHeight = videoH;
+        scaleFactor = 1;
+        offsetX = 0;
+        offsetY = 0;
+        previewCanvas.toBlob((blob) => { latestBlob = blob; }, "image/jpeg");
+      });
+  
+      // FILE UPLOAD
+      openFileBtn.addEventListener("click", () => { fileInput.click(); });
+  
+   // ► Helper einmalig definieren
+function hideBackground() {
+  document.getElementById("backgroundCanvas").style.display = "none";
+}
+
+// ▼ Datei‑Upload
+fileInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  // ► Hintergrund ausblenden
+  hideBackground();
+
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      const CANVAS_W = 640;
+      const CANVAS_H = 480;
+      previewCanvas.width  = CANVAS_W;
+      previewCanvas.height = CANVAS_H;
+
+      // Canvas leeren und **nur** das Nutzerbild zeichnen
+      ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+      originalWidth  = img.width;
+      originalHeight = img.height;
+      scaleFactor    = Math.min(CANVAS_W / img.width, CANVAS_H / img.height);
+      const newW     = img.width  * scaleFactor;
+      const newH     = img.height * scaleFactor;
+      offsetX        = (CANVAS_W - newW) / 2;
+      offsetY        = (CANVAS_H - newH) / 2;
+      ctx.drawImage(img, offsetX, offsetY, newW, newH);
+
+      // Bild als Blob speichern
+      fetch(ev.target.result)
+        .then((r) => r.blob())
+        .then((blob) => { latestBlob = blob; });
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+  
+      // ANALYSE
+      analyzeBtn.addEventListener("click", async () => {
+        if (!latestBlob) {
+          alert("No image for analysis!");
+          return;
+        }
+        let formData = new FormData();
+        formData.append("file", latestBlob, "uploaded.jpg");
+        try {
+          const response = await fetch(PREDICT_URL, { method: "POST", body: formData });
+          if (!response.ok) { throw new Error(`Server error: ${response.status}`); }
+          const predictions = await response.json();
+          drawBoundingBoxes(predictions);
+          // COUNTS
+          const counts = countBackwaren(predictions);
+          totalCroissants = counts.croissants;
+          totalBrezeln    = counts.brezeln;
+          totalKaiser     = counts.kaiserbr;  // Kaiserbrötchen
+  
+          // Anzeige
+          countsDiv.innerHTML = `
+            <p>Croissants gefunden: ${totalCroissants}</p>
+            <p>Brezeln gefunden: ${totalBrezeln}</p>
+            <p>Kaiserbrötchen gefunden: ${totalKaiser}</p>
+            <button id="auswertungBtn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded mt-4">
+              Auswertung
+            </button>
+          `;
+          const auswertungBtn = document.getElementById("auswertungBtn");
+          auswertungBtn.addEventListener("click", handleAuswertung);
+        } catch (err) {
+          console.error(err);
+          alert("Error analyzing image.");
+        }
+      });
+  
+      // BACKWAREN ZÄHLEN (Croissants, Brezeln, Kaiser)
+      function countBackwaren(predictions) {
+        let croissants = 0;
+        let brezeln    = 0;
+        let kaiserbr   = 0;  // Kaiserbrötchen
+  
+        predictions.forEach((pred) => {
+          const cls = pred.class.toLowerCase();
+          if (cls.includes("croissant")) {
+            croissants++;
+          } else if (cls.includes("bretzel")) {
+            brezeln++;
+          } else if (cls.includes("kaiser")) {
+            kaiserbr++;
+          }
+        });
+  
+        return { croissants, brezeln, kaiserbr };
+      }
+  
+      // BOUNDING BOXEN
+      function drawBoundingBoxes(predictions) {
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "red";
+        ctx.font = "16px Arial";
+        ctx.fillStyle = "red";
+  
+        predictions.forEach((pred) => {
+          const [ox1, oy1, ox2, oy2] = pred.bbox;
+          const w = ox2 - ox1;
+          const h = oy2 - oy1;
+          const x1 = ox1 * scaleFactor + offsetX;
+          const y1 = oy1 * scaleFactor + offsetY;
+          const wC = w * scaleFactor;
+          const hC = h * scaleFactor;
+          ctx.strokeRect(x1, y1, wC, hC);
+          const label = `${pred.class} (${(pred.confidence * 100).toFixed(1)}%)`;
+          drawLabelSafely(x1, y1, label);
+        });
+      }
+  
+      function drawLabelSafely(x, y, label) {
+        const margin = 5;
+        let textY = y - margin;
+        if (textY < 15) {
+          textY = y + 20;
+        }
+        ctx.fillText(label, x, textY);
+      }
+  
+      // AUSWERTUNG: Gleiche Struktur, aber "Brötchen" überall durch "Kaiserbrötchen" ersetzt
+      // und reale Summen für Kaiserbrötchen im Chart.
+      function handleAuswertung() {
+        const totalCostCroissant = totalCroissants * COST_CROISSANT;
+        const totalCostBretzel   = totalBrezeln    * COST_BRETZEL;
+        const totalCostKaiser    = totalKaiser     * COST_KAISER;
+        const totalSum           = totalCostCroissant + totalCostBretzel + totalCostKaiser;
+  
+        const minutesCroissants = totalCroissants * 3;
+        const minutesBrezeln    = totalBrezeln    * 2;
+        const minutesKaiser     = totalKaiser     * 2;
+  
+        // Ersetze mainContainer mit der bekannten 90vh-Auswertung,
+        // aber anstelle von "Brötchen" => "Kaiserbrötchen".
+        mainContainer.innerHTML = `
+          <div style="height:90vh" class="flex flex-col">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch flex-grow h-full">
+              <!-- Linke Spalte: Zusammenfassung, ökonomisch, sozial -->
+              <div class="flex flex-col gap-4 h-full flex-grow">
+                <!-- Zusammenfassung -->
+                <div class="bg-white border-2 border-gray-300 p-4 rounded">
+                  <div class="bg-gray-100 p-4 rounded">
+                    <div class="grid grid-cols-3 gap-4">
+                      <div class="mx-auto">
+                        <img src="/baeckerai/assets/croissant_icon.png" />
+                        Croissants: ${totalCroissants}
+                      </div>
+                      <div class="mx-auto">
+                        <img src="/baeckerai/assets/brezel_icon.png" />
+                        Brezeln: ${totalBrezeln}
+                      </div>
+                      <div class="mx-auto">
+                        <img src="/baeckerai/assets/broetchen_icon.png" />
+                        Kaiserbrötchen: ${totalKaiser}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- Ökonomisch -->
+                <div class="bg-white border-2 border-gray-300 p-4 rounded">
+                  <p class="text-lg font-semibold">ökonomisch</p>
+                  <p class="text-sm text-gray-600">
+                    Welche Ausgaben hätten vermieden werden können, wenn weniger Backwaren produziert worden wären?
+                  </p>
+                  <div class="bg-white p-4 rounded">
+                    <div class="bg-gray-100 p-4 rounded">
+                      <div class="grid grid-cols-5 grid-rows-2 gap-2 text-center items-center">
+                        <div class="p-4"></div>
+                        <div class="mx-auto p-4 text-gray-700 font-semibold">
+                          <img src="/baeckerai/assets/croissant_klein_icon_1.png" />
+                        </div>
+                        <div class="mx-auto p-4 text-gray-700 font-semibold">
+                          <img src="/baeckerai/assets/brezel_klein_icon.png" />
+                        </div>
+                        <div class="mx-auto p-4 text-gray-700 font-semibold">
+                          <!-- Kaiserbrötchen-Icon kann dasselbe "broetchen_icon" sein oder extra -->
+                          <img src="/baeckerai/assets/broetchen_klein_icon.png" />
+                        </div>
+                        <div class="p-4 text-gray-700 font-semibold">Summe</div>
+                        <div class="p-4 rounded flex items-center justify-center">
+                          <p class="text-gray-700 font-semibold">Reduzierbare <br> Ausgaben</p>
+                        </div>
+                        <div class="bg-[#bfe1f7] p-4 rounded flex items-center justify-center">
+                          <p class="text-gray-700">${totalCostCroissant.toFixed(2)} Euro</p>
+                        </div>
+                        <div class="bg-[#ffe3b6] p-4 rounded flex items-center justify-center">
+                          <p class="text-gray-700">${totalCostBretzel.toFixed(2)} Euro</p>
+                        </div>
+                        <div class="bg-[#cfffdf] p-4 rounded flex items-center justify-center">
+                          <p class="text-gray-700">${totalCostKaiser.toFixed(2)} Euro</p>
+                        </div>
+                        <div class="bg-white border-2 border-gray-300 p-4 rounded flex items-center justify-center">
+                          <p class="font-bold">${totalSum.toFixed(2)} Euro</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="mt-2 text-sm text-gray-500">
+                      <span class="inline-block mx-2">1 Croissant = 0,50&nbsp;€</span>
+                      <span class="inline-block mx-2">1 Brezel = 0,30&nbsp;€</span>
+                      <span class="inline-block mx-2">1 Kaiserbrötchen = 0,20&nbsp;€</span>
+                    </div>
+                  </div>
+                </div>
+                <!-- Sozial -->
+                <div class="bg-white border-2 border-gray-300 p-4 rounded flex-grow h-full">
+                  <p class="text-lg font-semibold">sozial</p>
+                  <div class="bg-gray-100 p-4 rounded">
+                    <canvas id="socialChart" class="w-full h-40"></canvas>
+                  </div>
+                </div>
+              </div>
+  
+              <!-- Rechte Spalte: Umweltkennzahlen -->
+              <div class="bg-white border-2 border-gray-300 p-4 rounded flex flex-col items-stretch h-full flex-grow">
+                
+                <div class="flex-1 flex flex-col mt-2">
+                  <!-- Oberer Bereich: Ressourcen-Boxen (pro Stück & Gesamtbedarf) -->
+                  <div class="flex gap-4" style="flex: 0 0 40%;">
+                    <!-- Box A: Ressourcen (pro Stück) -->
+                    <div class="bg-gray-100 p-4 rounded w-full" style="height: 100%; overflow: hidden;">
+                      <h2 class="font-semibold mb-1">Ressourcen</h2>
+                      <p class="text-sm text-gray-600 mb-2">
+                        Ressourcenbedarf pro Stück in der Backwarenherstellung
+                      </p>
+                      <div style="display: grid; grid-template-columns: 15% 85%; gap: 4px; height: 80%">
+                        <div class="flex items-center justify-start">
+                          <img src="/baeckerai/assets/croissant_klein_icon_1.png" class="h-8 object-contain" alt="Croissant Icon">
+                        </div>
+                        <div class="flex items-center justify-start">
+                          <canvas id="chartCroissant" class="w-full canvasRessourcen" width="100" height="40"></canvas>
+                        </div>
+                        <div class="flex items-center justify-start">
+                          <img src="/baeckerai/assets/brezel_klein_icon.png" class="h-8 object-contain" alt="Brezel Icon">
+                        </div>
+                        <div class="flex items-center justify-start">
+                          <canvas id="chartBrezel" class="w-full canvasRessourcen" width="100" height="40"></canvas>
+                        </div>
+                        <div class="flex items-center justify-start">
+                          <!-- Hier ebenfalls Kaiserbrötchen-Icon oder "broetchen_klein_icon" -->
+                          <img src="/baeckerai/assets/broetchen_klein_icon.png" class="h-8 object-contain" alt="Kaiserbrötchen Icon">
+                        </div>
+                        <div class="flex items-center justify-start">
+                          <canvas id="chartBroetchen" class="w-full canvasRessourcen" width="100" height="40"></canvas>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- Box B: Gesamter Ressourcenbedarf (multipliziert) -->
+                    <div class="bg-gray-100 p-4 rounded w-full" style="height: 100%;">
+                      <h2 class="font-semibold mb-1">gesamter Ressourcenbedarf für die übrig gebliebenen Backwaren</h2>
+                      <div style="display: grid; grid-template-columns: 15% 85%; gap: 4px; height: 80%">
+                        <div class="flex items-center justify-start">
+                          <img src="/baeckerai/assets/croissant_klein_icon_1.png" class="h-8 object-contain" alt="Croissant Icon">
+                        </div>
+                        <div class="flex items-center justify-start">
+                          <canvas id="chartCroissantTotal" class="w-full canvasRessourcen" width="100" height="40"></canvas>
+                        </div>
+                        <div class="flex items-center justify-start">
+                          <img src="/baeckerai/assets/brezel_klein_icon.png" class="h-8 object-contain" alt="Brezel Icon">
+                        </div>
+                        <div class="flex items-center justify-start">
+                          <canvas id="chartBrezelTotal" class="w-full canvasRessourcen" width="100" height="40"></canvas>
+                        </div>
+                        <div class="flex items-center justify-start">
+                          <img src="/baeckerai/assets/broetchen_klein_icon.png" class="h-8 object-contain" alt="Kaiserbrötchen Icon">
+                        </div>
+                        <div class="flex items-center justify-start">
+                          <canvas id="chartBroetchenTotal" class="w-full canvasRessourcen" width="100" height="40"></canvas>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+  
+                  <!-- Unterer Bereich: Umwelt-Boxen (CO₂, Wasser, Strom) -->
+                  <div class="flex gap-4 mt-2" style="flex: 0 0 60%; overflow: hidden;">
+                    <!-- Box 1: CO₂ Emissionen -->
+                    <div class="bg-gray-100 p-4 rounded w-full h-full">
+                      <h2 class="font-semibold mb-1">CO₂ Emissionen</h2>
+                      <p class="text-sm text-gray-600 mb-2">
+                        CO₂ (Scope 1/2)
+                      </p>
+                      <div class="flex flex-row gap-4 mb-4">
+                        <canvas id="co2CroissantChart" class="w-1/3 h-40 canvasEnv"></canvas>
+                        <canvas id="co2BrezelChart" class="w-1/3 h-40 canvasEnv"></canvas>
+                        <canvas id="co2BroetchenChart" class="w-1/3 h-40 canvasEnv"></canvas>
+                      </div>
+                      <div>
+                        <canvas id="co2DonutChart" class="w-full h-60 canvasEnv canvasDonut"></canvas>
+                      </div>
+                    </div>
+                    <!-- Box 2: Wasserverbrauch -->
+                    <div class="bg-gray-100 p-4 rounded w-full h-full">
+                      <h2 class="font-semibold mb-1">Wasserverbrauch</h2>
+                      <p class="text-sm text-gray-600 mb-2">
+                        Wasserverbrauch l
+                      </p>
+                      <div class="flex flex-row gap-4 mb-4">
+                        <canvas id="waterCroissantChart" class="w-1/3 h-40 canvasEnv"></canvas>
+                        <canvas id="waterBrezelChart" class="w-1/3 h-40 canvasEnv"></canvas>
+                        <canvas id="waterBroetchenChart" class="w-1/3 h-40 canvasEnv"></canvas>
+                      </div>
+                      <div>
+                        <canvas id="waterDonutChart" class="w-full h-60 canvasEnv canvasDonut"></canvas>
+                      </div>
+                    </div>
+                    <!-- Box 3: Stromverbrauch -->
+                    <div class="bg-gray-100 p-4 rounded w-full h-full">
+                      <h2 class="font-semibold mb-1">Stromverbrauch</h2>
+                      <p class="text-sm text-gray-600 mb-2">
+                        Stromverbrauch (in kWh)
+                      </p>
+                      <div class="flex flex-row gap-4 mb-4">
+                        <canvas id="electricityCroissantChart" class="w-1/3 h-40 canvasEnv"></canvas>
+                        <canvas id="electricityBrezelChart" class="w-1/3 h-40 canvasEnv"></canvas>
+                        <canvas id="electricityBroetchenChart" class="w-1/3 h-40 canvasEnv"></canvas>
+                      </div>
+                      <div>
+                        <canvas id="electricityDonutChart" class="w-full h-60 canvasEnv canvasDonut"></canvas>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+  
+        // Nun Charts erzeugen (Social + Ressourcen + Umwelt)
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            const socialCtx = document.getElementById("socialChart").getContext("2d");
+            new Chart(socialCtx, {
+              type: "bar",
+              data: {
+                labels: ["Herstellungszeit"],
+                datasets: [
+                  { label: "Croissants", data: [minutesCroissants], backgroundColor: "#bfe1f7" },
+                  { label: "Brezeln",    data: [minutesBrezeln],    backgroundColor: "#ffe3b6" },
+                  { label: "Kaiserbrötchen", data: [minutesKaiser], backgroundColor: "#cfffdf" }
+                ]
+              },
+              plugins: [ChartDataLabels],
+              options: {
+                indexAxis: "y",
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                  x: { stacked: true, display: false, grid: { display: false } },
+                  y: { stacked: true, display: false, grid: { display: false } }
+                },
+                plugins: {
+                  legend: { position: "bottom" },
+                  title: {
+                    display: true,
+                    text: "Soziale Perspektive: Produktionszeit in Minuten (Beispiel)"
+                  },
+                  datalabels: {
+                    anchor: "center", align: "center", color: "#000",
+                    font: { weight: "bold" },
+                    formatter: (value) => `${value} Min`
+                  }
+                }
+              }
+            });
+  
+            // Ressourcen-Charts
+            loadStackedCharts();
+            loadTotalStackedCharts();
+  
+            // CO₂
+            const co2Croissants = totalCroissants * 150;
+            const co2Brezeln    = totalBrezeln    * 120;
+            const co2Kaiser     = totalKaiser     * 100;
+            new Chart(document.getElementById("co2CroissantChart").getContext("2d"), {
+              type: "bar",
+              data: { labels: ["Croissant"], datasets: [{ label: "CO₂ (g)", data: [co2Croissants], backgroundColor: "#bfe1f7" }] },
+              options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false } } }
+            });
+            new Chart(document.getElementById("co2BrezelChart").getContext("2d"), {
+              type: "bar",
+              data: { labels: ["Brezel"], datasets: [{ label: "CO₂ (g)", data: [co2Brezeln], backgroundColor: "#ffe3b6" }] },
+              options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false } } }
+            });
+            new Chart(document.getElementById("co2BroetchenChart").getContext("2d"), {
+              type: "bar",
+              data: { labels: ["Kaiserbrötchen"], datasets: [{ label: "CO₂ (g)", data: [co2Kaiser], backgroundColor: "#cfffdf" }] },
+              options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false } } }
+            });
+            new Chart(document.getElementById("co2DonutChart").getContext("2d"), {
+              type: "doughnut",
+              data: {
+                labels: ["Croissant", "Brezel", "Kaiserbrötchen"],
+                datasets: [{ data: [co2Croissants, co2Brezeln, co2Kaiser], backgroundColor: ["#bfe1f7", "#ffe3b6", "#cfffdf"] }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { position: "bottom" },
+                  title: { display: true, text: "CO₂ Emissionen (g)" }
+                }
+              }
+            });
+  
+            // Wasser
+            const waterCroissants = totalCroissants * 0.3;
+            const waterBrezeln    = totalBrezeln    * 0.25;
+            const waterKaiser     = totalKaiser     * 0.2;
+            new Chart(document.getElementById("waterCroissantChart").getContext("2d"), {
+              type: "bar",
+              data: { labels: ["Croissant"], datasets: [{ label: "Wasser (l)", data: [waterCroissants], backgroundColor: "#bfe1f7" }] },
+              options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false } } }
+            });
+            new Chart(document.getElementById("waterBrezelChart").getContext("2d"), {
+              type: "bar",
+              data: { labels: ["Brezel"], datasets: [{ label: "Wasser (l)", data: [waterBrezeln], backgroundColor: "#ffe3b6" }] },
+              options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false } } }
+            });
+            new Chart(document.getElementById("waterBroetchenChart").getContext("2d"), {
+              type: "bar",
+              data: { labels: ["Kaiserbrötchen"], datasets: [{ label: "Wasser (l)", data: [waterKaiser], backgroundColor: "#cfffdf" }] },
+              options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false } } }
+            });
+            new Chart(document.getElementById("waterDonutChart").getContext("2d"), {
+              type: "doughnut",
+              data: {
+                labels: ["Croissant", "Brezel", "Kaiserbrötchen"],
+                datasets: [{ data: [waterCroissants, waterBrezeln, waterKaiser], backgroundColor: ["#bfe1f7", "#ffe3b6", "#cfffdf"] }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { position: "bottom" },
+                  title: { display: true, text: "Wasserverbrauch (l)" }
+                }
+              }
+            });
+  
+            // Strom
+            const elecCroissants = totalCroissants * 0.6;
+            const elecBrezeln    = totalBrezeln    * 0.5;
+            const elecKaiser     = totalKaiser     * 0.4;
+            new Chart(document.getElementById("electricityCroissantChart").getContext("2d"), {
+              type: "bar",
+              data: { labels: ["Croissant"], datasets: [{ label: "Strom (kWh)", data: [elecCroissants], backgroundColor: "#bfe1f7" }] },
+              options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false } } }
+            });
+            new Chart(document.getElementById("electricityBrezelChart").getContext("2d"), {
+              type: "bar",
+              data: { labels: ["Brezel"], datasets: [{ label: "Strom (kWh)", data: [elecBrezeln], backgroundColor: "#ffe3b6" }] },
+              options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false } } }
+            });
+            new Chart(document.getElementById("electricityBroetchenChart").getContext("2d"), {
+              type: "bar",
+              data: { labels: ["Kaiserbrötchen"], datasets: [{ label: "Strom (kWh)", data: [elecKaiser], backgroundColor: "#cfffdf" }] },
+              options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { display: false } }, plugins: { legend: { display: false } } }
+            });
+            new Chart(document.getElementById("electricityDonutChart").getContext("2d"), {
+              type: "doughnut",
+              data: {
+                labels: ["Croissant", "Brezel", "Kaiserbrötchen"],
+                datasets: [{ data: [elecCroissants, elecBrezeln, elecKaiser], backgroundColor: ["#bfe1f7", "#ffe3b6", "#cfffdf"] }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { position: "bottom" },
+                  title: { display: true, text: "Stromverbrauch (kWh)" }
+                }
+              }
+            });
+          });
+        });
+      }
+  
+      // Für die Ressourcen-Charts
+      function loadStackedCharts() {
+        createStackedChart("chartCroissant", "Croissant", 30, 20, 10, 5);
+        createStackedChart("chartBrezel",    "Brezel",    40, 0,  20);
+        // Hier ersetzen wir "Brötchen" durch "Kaiserbrötchen"
+        createStackedChart("chartBroetchen", "Kaiserbrötchen", 35, 5, 15);
+        console.log("Ressourcen-Charts geladen");
+      }
+  
+      function loadTotalStackedCharts() {
+        createStackedChart("chartCroissantTotal", "Croissant",      30 * totalCroissants, 20 * totalCroissants, 10 * totalCroissants, 5  * totalCroissants);
+        createStackedChart("chartBrezelTotal",    "Brezel",         40 * totalBrezeln,    0  * totalBrezeln,    20 * totalBrezeln);
+        createStackedChart("chartBroetchenTotal", "Kaiserbrötchen", 35 * totalKaiser,     5  * totalKaiser,     15 * totalKaiser);
+      }
+  
+      // Erzeugt einen horizontal gestapelten Ressourcen-Chart
+      function createStackedChart(canvasId, label, mehl, butter, wasser, zucker) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) {
+          console.warn(`Canvas mit ID ${canvasId} nicht gefunden.`);
+          return;
+        }
+        const ctx = canvas.getContext("2d");
+        let datasets = [
+          { label: "Mehl", data: [mehl], backgroundColor: "#FFD29B" }
+        ];
+  
+        // Nur Croissants haben "Zucker" als extra Datensatz
+        if (label.toLowerCase().includes("croissant") && typeof zucker !== "undefined") {
+          datasets.push({ label: "Butter", data: [butter], backgroundColor: "#FFEEAA" });
+          datasets.push({ label: "Zucker", data: [zucker], backgroundColor: "#FFF9C4" });
+          datasets.push({ label: "Wasser", data: [wasser], backgroundColor: "#C9F0FF" });
+        } else {
+          // Bretzel / Kaiserbrötchen
+          datasets.push({ label: "Butter", data: [butter], backgroundColor: "#FFEEAA" });
+          datasets.push({ label: "Wasser", data: [wasser], backgroundColor: "#C9F0FF" });
+        }
+  
+        new Chart(ctx, {
+          type: "bar",
+          data: {
+            labels: [label],
+            datasets: datasets,
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: "y",
+            scales: {
+              x: {
+                stacked: true,
+                display: false,
+                grid: { display: false },
+              },
+              y: {
+                stacked: true,
+                display: false,
+                grid: { display: false },
+                barThickness: 5,
+                maxBarThickness: 5,
+                categoryPercentage: 0.2,
+                barPercentage: 0.5,
+              },
+            },
+            plugins: {
+              legend: {
+                display: true,
+                position: "bottom",
+                labels: {
+                  boxWidth: 12,
+                  font: { size: 12 },
+                },
+              },
+              datalabels: {
+                display: true,
+                anchor: "center",
+                align: "center",
+                offset: 0,
+                color: "#000",
+                font: { size: 10 },
+                formatter: (value) => value + " g",
+              },
+            },
+            layout: { padding: 0 },
+          },
+        });
+      }
+  
+      checkServerStatus();
+    </script>
+  </body>
+</html>
