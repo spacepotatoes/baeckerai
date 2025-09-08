@@ -46,7 +46,7 @@ Unterstützte Objekte sind:
 - Gunicorn als WSGI-Server  
 - (Optional) Node.js für Frontend-Assets
 
-### Backend starten
+### Backend starten --- Die Pfade zu den certfiles müssen durch den neuen Admin angepasst werden
 ```bash
 cd backend
 python -m venv venv
