@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Logo-Seite</title>
+  <style>
+    /* Container für das Logo */
+    #logoContainer {
+      width: 100vw;            /* Vollbildbreite */
+      height: 100vh;           /* Vollbildhöhe */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #fff;  /* Einfacher weißer Hintergrund */
+      transition: opacity 1s ease; /* Fade-Out Übergang */
+    }
+    /* Logo selbst */
+    #logo {
+      max-width: 400px;  /* Beispiel: max. 200 px Breite */
+    }
+  </style>
+</head>
+<body>
+
+  <div id="logoContainer">
+    <!-- Dein Dummy-Logo (Bild, z.B. aus localer Datei oder CDN) -->
+    <img src="baeckerAi_logo_v3.png" alt="Logo" id="logo">
+  </div>
+
+  <script>
+    // Warte, bis die Seite komplett geladen ist
+    window.addEventListener('load', function() {
+      // 4 Sekunden warten
+      setTimeout(function() {
+        // Logo ausfaden
+        var logoContainer = document.getElementById('logoContainer');
+        logoContainer.style.opacity = '0';
+
+        // Nach 1 Sekunde (so lange dauert das Ausfaden in der CSS transition)
+        // weiterleiten auf die BäckerAI-Seite
+        setTimeout(function() {
+          window.location.href = "https://objective-dhawan.92-205-128-180.plesk.page/baeckerai/index.html";
+        }, 1000);
+
+      }, 4000);
+    });
+  </script>
+
+</body>
+</html>
